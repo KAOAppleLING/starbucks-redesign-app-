@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 // Fix: Import `StarIcon` to resolve 'cannot find name' error on line 50.
 import { BellIcon, CheckBadgeIcon, SunIcon, TrophyIcon, SparklesIcon, UserGroupIcon, StarIcon, XMarkIcon } from '../constants';
@@ -46,12 +45,35 @@ const notifications = [
     }
 ];
 
+const ecoImpactData = [
+    { name: 'M', co2: 300, day: 'Monday' },
+    { name: 'T', co2: 400, day: 'Tuesday' },
+    { name: 'W', co2: 300, day: 'Wednesday' },
+    { name: 'T', co2: 450, day: 'Thursday' },
+    { name: 'F', co2: 350, day: 'Friday' },
+    { name: 'S', co2: 400, day: 'Saturday' },
+    { name: 'S', co2: 500, day: 'Sunday' },
+];
 
 const RewardsScreen: React.FC = () => {
     const userPoints = 350;
     const pointsForNextCoffee = 500;
     const progress = (userPoints / pointsForNextCoffee) * 100;
     const [isNotificationsVisible, setIsNotificationsVisible] = useState(false);
+    const [activeEcoImpactIndex, setActiveEcoImpactIndex] = useState<number | null>(ecoImpactData.length - 1);
+
+    const totalCo2SavedKg = ecoImpactData.reduce((acc, curr) => acc + curr.co2, 0) / 1000;
+
+    const handleBarClick = (_data: any, index: number) => {
+        setActiveEcoImpactIndex(prevIndex => prevIndex === index ? null : index);
+    };
+
+    const activeData = activeEcoImpactIndex !== null ? ecoImpactData[activeEcoImpactIndex] : null;
+
+    const ecoImpactSubtitle = activeData 
+        ? `On ${activeData.day}, you saved ${(activeData.co2 / 1000).toFixed(1)} kg of CO₂.`
+        : 'Your sustainable choices are making a difference!';
+
 
   return (
     <div className="p-4 space-y-6">
@@ -93,13 +115,17 @@ const RewardsScreen: React.FC = () => {
         <div className="flex justify-between items-start">
             <div>
                 <h3 className="font-bold text-lg">Your Eco Impact</h3>
-                <p className="text-xs text-cafa-text-secondary">Your sustainable choices are making a difference!</p>
-                <p className="text-4xl font-bold text-cafa-eco mt-2">2.7 <span className="text-lg font-semibold">kg CO₂ saved</span></p>
+                <p className="text-xs text-cafa-text-secondary">{ecoImpactSubtitle}</p>
+                <p className="text-4xl font-bold text-cafa-eco mt-2">{totalCo2SavedKg.toFixed(1)} <span className="text-lg font-semibold">kg CO₂ saved</span></p>
             </div>
             <CheckBadgeIcon className="w-8 h-8 text-cafa-eco" />
         </div>
         <div className="h-32 mt-4">
-            <EcoImpactChart />
+            <EcoImpactChart 
+                data={ecoImpactData}
+                activeIndex={activeEcoImpactIndex}
+                onBarClick={handleBarClick}
+            />
         </div>
       </section>
 
