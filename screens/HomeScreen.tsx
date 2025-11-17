@@ -1,3 +1,4 @@
+
 import React from 'react';
 import type { Screen } from '../types';
 import { SunIcon, UserIcon, DevicePhoneMobileIcon, QrCodeIcon, MicrophoneIcon } from '../constants';
@@ -26,18 +27,18 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
       </header>
 
       {/* Main Card */}
-      <div className="bg-white rounded-2xl shadow-sm p-5">
+      <div className="bg-starbucks-green rounded-2xl shadow-sm p-5">
         <div className="flex items-center gap-4">
             <img src="https://picsum.photos/id/225/200/200" alt="Latte Art" className="w-24 h-24 rounded-xl object-cover" />
             <div>
-                <h2 className="text-xl font-bold text-cafa-primary">Start your order</h2>
-                <p className="text-cafa-text-secondary mt-1">Get your coffee faster</p>
+                <h2 className="text-xl font-bold text-white">Start your order</h2>
+                <p className="text-white/90 mt-1">Get your coffee faster</p>
             </div>
         </div>
         <div className="grid grid-cols-3 gap-3 mt-5">
-            <ActionButton icon={DevicePhoneMobileIcon} label="Mobile Order" />
-            <ActionButton icon={QrCodeIcon} label="Scan & Pay" />
-            <ActionButton icon={MicrophoneIcon} label="AI Voice" isAccent/>
+            <ActionButton icon={DevicePhoneMobileIcon} label="Mobile Order" onDark />
+            <ActionButton icon={QrCodeIcon} label="Scan & Pay" onDark />
+            <ActionButton icon={MicrophoneIcon} label="AI Voice" isAccent onDark/>
         </div>
       </div>
       
@@ -48,7 +49,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
             <h3 className="text-xl font-bold text-cafa-text-primary">Just for You</h3>
             <p className="text-sm text-cafa-text-secondary mt-1">Customize your drink! Tap to chat with our AI and get a beverage recommendation tailored.</p>
           </div>
-          <button className="text-xs font-semibold bg-cafa-accent/20 text-cafa-accent px-3 py-1.5 rounded-full whitespace-nowrap flex-shrink-0">AI Assistant</button>
+          <button className="text-xs font-semibold bg-starbucks-green text-white px-3 py-1.5 rounded-full whitespace-nowrap flex-shrink-0">AI Assistant</button>
         </div>
         <div className="flex space-x-4 overflow-x-auto pb-4">
           <RecommendationCard
@@ -76,7 +77,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
       <section>
         <div className="relative rounded-2xl overflow-hidden shadow-sm">
             <img src="https://picsum.photos/id/1060/400/300" alt="Person holding eco-friendly cup" className="w-full h-48 object-cover" />
-            <div className="absolute inset-0 bg-black/30"></div>
+            <div className="absolute inset-0 bg-cafa-primary/60"></div>
             <div className="absolute bottom-0 left-0 p-5 text-white">
                 <p className="text-sm font-bold uppercase tracking-wider text-cafa-eco bg-white/90 px-2 py-1 rounded w-fit mb-2">Sustainability</p>
                 <h3 className="text-xl font-bold">Meet Our Eco-Friendly Cups</h3>
@@ -91,11 +92,19 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
   );
 };
 
-const ActionButton: React.FC<{ icon: React.FC<{className?: string}>, label: string, isAccent?: boolean }> = ({ icon: Icon, label, isAccent }) => {
-    const baseClasses = "flex flex-col items-center justify-center p-3 rounded-xl space-y-1.5 h-24 text-center";
-    const colorClasses = isAccent 
-        ? "bg-cafa-accent/20 text-cafa-accent" 
-        : "bg-gray-100 text-cafa-text-primary";
+const ActionButton: React.FC<{ icon: React.FC<{className?: string}>, label: string, isAccent?: boolean, onDark?: boolean }> = ({ icon: Icon, label, isAccent, onDark }) => {
+    const baseClasses = "flex flex-col items-center justify-center p-3 rounded-xl space-y-1.5 h-24 text-center transition-colors";
+    
+    let colorClasses: string;
+    if (onDark) {
+        colorClasses = isAccent 
+            ? "bg-white/25 hover:bg-white/35 text-white" 
+            : "bg-white/10 hover:bg-white/20 text-white";
+    } else {
+        colorClasses = isAccent 
+            ? "bg-cafa-accent/20 text-cafa-accent" 
+            : "bg-gray-100 text-cafa-text-primary";
+    }
     
     return (
         <button className={`${baseClasses} ${colorClasses}`}>
