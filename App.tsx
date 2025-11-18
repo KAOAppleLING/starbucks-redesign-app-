@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import type { Screen, CoffeeOption, CartItem } from './types';
 import BottomNav from './components/BottomNav';
@@ -10,6 +11,7 @@ import AccountScreen from './screens/AccountScreen';
 const App: React.FC = () => {
   const [activeScreen, setActiveScreen] = useState<Screen>('Home');
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>(['Eco-Warrior']);
 
   const addToCart = (coffee: CoffeeOption) => {
     setCart(prevCart => {
@@ -36,12 +38,24 @@ const App: React.FC = () => {
     });
   };
 
+  const toggleAchievement = (name: string) => {
+    if (unlockedAchievements.includes(name)) {
+        setUnlockedAchievements(prev => prev.filter(n => n !== name));
+    } else {
+        setUnlockedAchievements(prev => [...prev, name]);
+    }
+  };
+
   const renderScreen = () => {
     switch (activeScreen) {
       case 'Home':
         return <HomeScreen setActiveScreen={setActiveScreen} />;
       case 'Rewards':
-        return <RewardsScreen />;
+        return <RewardsScreen 
+            setActiveScreen={setActiveScreen} 
+            unlockedAchievements={unlockedAchievements}
+            toggleAchievement={toggleAchievement}
+        />;
       case 'Order':
         return <OrderScreen cart={cart} updateCartItemQuantity={updateCartItemQuantity} setActiveScreen={setActiveScreen} />;
       case 'Stores':

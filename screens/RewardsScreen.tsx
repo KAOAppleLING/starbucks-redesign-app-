@@ -1,7 +1,8 @@
+
 import React, { useState } from 'react';
 // Fix: Import `StarIcon` to resolve 'cannot find name' error on line 50.
 import { BellIcon, CheckBadgeIcon, SunIcon, TrophyIcon, SparklesIcon, UserGroupIcon, StarIcon, XMarkIcon } from '../constants';
-import type { Achievement } from '../types';
+import type { Achievement, Screen } from '../types';
 import EcoImpactChart from '../components/EcoImpactChart';
 
 // Fix: Define `CoffeeIcon` before it is used in the `achievements` array to prevent a 'used before declaration' error on line 8.
@@ -55,7 +56,13 @@ const ecoImpactData = [
     { name: 'S', co2: 500, day: 'Sunday' },
 ];
 
-const RewardsScreen: React.FC = () => {
+interface RewardsScreenProps {
+    setActiveScreen: (screen: Screen) => void;
+    unlockedAchievements: string[];
+    toggleAchievement: (name: string) => void;
+}
+
+const RewardsScreen: React.FC<RewardsScreenProps> = ({ setActiveScreen, unlockedAchievements = [], toggleAchievement }) => {
     const userPoints = 350;
     const pointsForNextCoffee = 500;
     const progress = (userPoints / pointsForNextCoffee) * 100;
@@ -66,6 +73,13 @@ const RewardsScreen: React.FC = () => {
 
     const handleBarClick = (_data: any, index: number) => {
         setActiveEcoImpactIndex(prevIndex => prevIndex === index ? null : index);
+    };
+
+    const handleAchievementClick = (name: string) => {
+        toggleAchievement(name);
+        if (name === 'Morning Regular') {
+            setActiveScreen('Home');
+        }
     };
 
     const activeData = activeEcoImpactIndex !== null ? ecoImpactData[activeEcoImpactIndex] : null;
@@ -152,7 +166,12 @@ const RewardsScreen: React.FC = () => {
         <h3 className="text-xl font-bold mb-3">Achievements</h3>
         <div className="grid grid-cols-3 gap-4">
             {achievements.map((ach, index) => (
-                <AchievementBadge key={index} achievement={ach} />
+                <AchievementBadge 
+                    key={index} 
+                    achievement={ach} 
+                    isUnlocked={unlockedAchievements.includes(ach.name)}
+                    onClick={() => handleAchievementClick(ach.name)}
+                />
             ))}
         </div>
       </section>
@@ -228,15 +247,14 @@ const RewardCard: React.FC<{image: string, title: string, expiry: string}> = ({i
     </div>
 );
 
-const AchievementBadge: React.FC<{achievement: Achievement}> = ({achievement}) => {
-    const isEco = achievement.name === 'Eco-Warrior';
+const AchievementBadge: React.FC<{achievement: Achievement, isUnlocked: boolean, onClick: () => void}> = ({achievement, isUnlocked, onClick}) => {
     return (
-        <div className="flex flex-col items-center text-center gap-2">
-            <div className={`w-16 h-16 rounded-full flex items-center justify-center ${isEco ? 'bg-cafa-eco text-white' : 'bg-gray-200 text-cafa-text-secondary'}`}>
+        <button onClick={onClick} className="flex flex-col items-center text-center gap-2 w-full focus:outline-none">
+            <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-colors duration-300 ${isUnlocked ? 'bg-cafa-eco text-white' : 'bg-gray-200 text-cafa-text-secondary'}`}>
                 <achievement.icon className="w-8 h-8" />
             </div>
             <p className="text-xs font-semibold">{achievement.name}</p>
-        </div>
+        </button>
     );
 };
 

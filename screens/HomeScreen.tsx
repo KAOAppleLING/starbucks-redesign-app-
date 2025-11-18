@@ -1,8 +1,7 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import type { Screen } from '../types';
-import { SunIcon, UserIcon, DevicePhoneMobileIcon, QrCodeIcon, MicrophoneIcon, XMarkIcon } from '../constants';
-import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
+import { SunIcon, UserIcon, DevicePhoneMobileIcon, QrCodeIcon, MicrophoneIcon, XMarkIcon, CloudIcon, CoffeeIcon, MapPinIcon, ChevronDownIcon, RainIcon } from '../constants';
+import { GoogleGenAI, LiveServerMessage, Modality, Type } from '@google/genai';
 
 interface HomeScreenProps {
   setActiveScreen: (screen: Screen) => void;
@@ -11,6 +10,10 @@ interface HomeScreenProps {
 const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannerMode, setScannerMode] = useState<'scan' | 'my_code'>('scan');
+  const [isWeatherOpen, setIsWeatherOpen] = useState(false);
+  const [location, setLocation] = useState('New York, USA');
+  const [aiTip, setAiTip] = useState<{ text: string; drink: string } | null>(null);
+  const [isTipLoading, setIsTipLoading] = useState(false);
   
   // Voice Assistant State
   const [isVoiceAssistantOpen, setIsVoiceAssistantOpen] = useState(false);
@@ -30,6 +33,110 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
     setScannerMode('scan');
     setIsScannerOpen(true);
   };
+
+  // Mock weather data for demonstration
+  const weatherData: Record<string, {
+    current: { temp: number; condition: string; icon: any };
+    forecast: { day: string; temp: number; icon: any; condition: string }[];
+    tip: { text: string; drink: string };
+  }> = {
+    'New York, USA': {
+      current: { temp: 24, condition: 'Sunny', icon: SunIcon },
+      forecast: [
+        { day: 'Mon', temp: 24, icon: SunIcon, condition: 'Sunny' },
+        { day: 'Tue', temp: 22, icon: CloudIcon, condition: 'Partly Cloudy' },
+        { day: 'Wed', temp: 19, icon: CloudIcon, condition: 'Cloudy' },
+        { day: 'Thu', temp: 21, icon: CloudIcon, condition: 'Cloudy' },
+        { day: 'Fri', temp: 25, icon: SunIcon, condition: 'Sunny' },
+        { day: 'Sat', temp: 27, icon: SunIcon, condition: 'Sunny' },
+        { day: 'Sun', temp: 23, icon: CloudIcon, condition: 'Partly Cloudy' },
+      ],
+      tip: { text: "It's warm! Try our Iced Caramel Latte to cool down.", drink: "Iced Caramel Latte" }
+    },
+    'London, UK': {
+      current: { temp: 14, condition: 'Rainy', icon: RainIcon },
+      forecast: [
+        { day: 'Mon', temp: 14, icon: RainIcon, condition: 'Rainy' },
+        { day: 'Tue', temp: 15, icon: CloudIcon, condition: 'Cloudy' },
+        { day: 'Wed', temp: 13, icon: RainIcon, condition: 'Heavy Rain' },
+        { day: 'Thu', temp: 14, icon: CloudIcon, condition: 'Cloudy' },
+        { day: 'Fri', temp: 16, icon: CloudIcon, condition: 'Partly Cloudy' },
+        { day: 'Sat', temp: 18, icon: SunIcon, condition: 'Sunny' },
+        { day: 'Sun', temp: 16, icon: CloudIcon, condition: 'Cloudy' },
+      ],
+      tip: { text: "It's rainy! A warm Flat White is perfect for today.", drink: "Flat White" }
+    },
+    'Taipei, Taiwan': {
+      current: { temp: 30, condition: 'Humid', icon: CloudIcon },
+      forecast: [
+        { day: 'Mon', temp: 30, icon: CloudIcon, condition: 'Cloudy' },
+        { day: 'Tue', temp: 32, icon: SunIcon, condition: 'Sunny' },
+        { day: 'Wed', temp: 29, icon: RainIcon, condition: 'T-Storms' },
+        { day: 'Thu', temp: 28, icon: RainIcon, condition: 'Rain' },
+        { day: 'Fri', temp: 31, icon: CloudIcon, condition: 'Cloudy' },
+        { day: 'Sat', temp: 33, icon: SunIcon, condition: 'Hot' },
+        { day: 'Sun', temp: 31, icon: SunIcon, condition: 'Sunny' },
+      ],
+      tip: { text: "It's hot! Grab a Cold Brew to stay refreshed.", drink: "Cold Brew" }
+    },
+    'Tokyo, Japan': {
+      current: { temp: 22, condition: 'Clear', icon: SunIcon },
+      forecast: [
+        { day: 'Mon', temp: 22, icon: SunIcon, condition: 'Clear' },
+        { day: 'Tue', temp: 23, icon: SunIcon, condition: 'Sunny' },
+        { day: 'Wed', temp: 21, icon: CloudIcon, condition: 'Cloudy' },
+        { day: 'Thu', temp: 20, icon: RainIcon, condition: 'Rain' },
+        { day: 'Fri', temp: 22, icon: CloudIcon, condition: 'Cloudy' },
+        { day: 'Sat', temp: 24, icon: SunIcon, condition: 'Sunny' },
+        { day: 'Sun', temp: 25, icon: SunIcon, condition: 'Sunny' },
+      ],
+      tip: { text: "Perfect weather! Enjoy a Caffè Latte outside.", drink: "Caffè Latte" }
+    }
+  };
+
+  const currentWeatherData = weatherData[location] || weatherData['New York, USA'];
+  const CurrentIcon = currentWeatherData.current.icon;
+
+  // --- AI Tip Generation ---
+  const fetchCoffeeTip = async () => {
+    setIsTipLoading(true);
+    try {
+        const current = weatherData[location].current;
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: `The current weather in ${location} is ${current.temp}°C and ${current.condition}. Suggest a coffee drink from a standard menu (e.g., Latte, Cold Brew, Cappuccino, Flat White, etc.) that fits this weather. Return a JSON object with "drink" (the name of the drink) and "text" (a friendly 1-sentence recommendation including the drink name verbatim).`,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        drink: { type: Type.STRING },
+                        text: { type: Type.STRING },
+                    }
+                }
+            }
+        });
+        const data = JSON.parse(response.text || '{}');
+        if (data.drink && data.text) {
+            setAiTip(data);
+        } else {
+            setAiTip(weatherData[location].tip);
+        }
+    } catch (e) {
+        console.error("AI Tip Error", e);
+        setAiTip(weatherData[location].tip);
+    } finally {
+        setIsTipLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isWeatherOpen) {
+        fetchCoffeeTip();
+    }
+  }, [location, isWeatherOpen]);
+
 
   // --- Audio Helper Functions ---
   function createBlob(data: Float32Array): { data: string; mimeType: string } {
@@ -358,6 +465,102 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
             </div>
         </div>
       )}
+      
+      {/* Weather Overlay */}
+      {isWeatherOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center animate-in fade-in duration-200 p-4">
+            <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
+                <div className="bg-cafa-primary p-6 text-white relative overflow-hidden">
+                    {/* Decorative circles */}
+                    <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 rounded-full blur-2xl"></div>
+                    <div className="absolute top-10 -left-10 w-24 h-24 bg-cafa-accent/20 rounded-full blur-xl"></div>
+                    
+                    <div className="relative z-10 flex justify-between items-start">
+                        <div>
+                            <h2 className="text-3xl font-bold">{currentWeatherData.current.temp}°C</h2>
+                            <p className="font-medium opacity-90">{currentWeatherData.current.condition}</p>
+                            <p className="text-sm opacity-75 mt-1 mb-3">Mon, 12 Aug</p>
+                            
+                            {/* Location Selector */}
+                            <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-md rounded-full px-3 py-1.5 w-fit transition-colors hover:bg-white/30 cursor-pointer group">
+                                <MapPinIcon className="w-3.5 h-3.5 text-cafa-accent" />
+                                <select 
+                                    value={location} 
+                                    onChange={(e) => setLocation(e.target.value)}
+                                    className="bg-transparent text-xs text-white font-medium focus:outline-none appearance-none cursor-pointer pr-1"
+                                >
+                                    <option value="New York, USA" className="text-cafa-text-primary">New York, USA</option>
+                                    <option value="London, UK" className="text-cafa-text-primary">London, UK</option>
+                                    <option value="Taipei, Taiwan" className="text-cafa-text-primary">Taipei, Taiwan</option>
+                                    <option value="Tokyo, Japan" className="text-cafa-text-primary">Tokyo, Japan</option>
+                                </select>
+                                <ChevronDownIcon className="w-3 h-3 text-white/70 group-hover:text-white" />
+                            </div>
+                        </div>
+                        <CurrentIcon className="w-16 h-16 text-cafa-accent" />
+                    </div>
+                    <button 
+                        onClick={() => setIsWeatherOpen(false)}
+                        className="absolute top-4 right-4 text-white/70 hover:text-white hover:bg-white/10 rounded-full p-2 transition-colors z-20"
+                    >
+                        <XMarkIcon className="w-6 h-6" />
+                    </button>
+                </div>
+                
+                <div className="p-6">
+                    <h3 className="font-bold text-cafa-text-primary mb-4">7-Day Forecast</h3>
+                    <div className="space-y-4">
+                        {currentWeatherData.forecast.map((day, i) => (
+                            <div key={i} className="flex items-center justify-between">
+                                <span className="w-10 font-medium text-cafa-text-secondary">{day.day}</span>
+                                <div className="flex-1 flex items-center justify-center gap-2">
+                                    <day.icon className={`w-5 h-5 ${day.condition.includes('Sunny') || day.condition.includes('Hot') || day.condition.includes('Clear') ? 'text-cafa-accent' : 'text-gray-400'}`} />
+                                    <span className="text-sm text-cafa-text-secondary w-24">{day.condition}</span>
+                                </div>
+                                <span className="font-bold text-cafa-text-primary w-10 text-right">{day.temp}°</span>
+                            </div>
+                        ))}
+                    </div>
+                    
+                    <div className="mt-6 bg-orange-50 p-4 rounded-xl flex items-start gap-3">
+                        <div className="bg-orange-100 p-2 rounded-full">
+                            <CoffeeIcon className="w-5 h-5 text-orange-600" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold text-orange-800 uppercase tracking-wide">Coffee Tip</p>
+                            {isTipLoading ? (
+                                <div className="animate-pulse mt-1 space-y-1">
+                                    <div className="h-3 bg-orange-200/50 rounded w-3/4"></div>
+                                    <div className="h-3 bg-orange-200/50 rounded w-1/2"></div>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-orange-900 mt-0.5">
+                                    {aiTip ? (
+                                        (() => {
+                                            const parts = aiTip.text.split(aiTip.drink);
+                                            return parts.map((part, i) => (
+                                                <React.Fragment key={i}>
+                                                    {part}
+                                                    {i < parts.length - 1 && <strong>{aiTip.drink}</strong>}
+                                                </React.Fragment>
+                                            ));
+                                        })()
+                                    ) : (
+                                        // Fallback if AI hasn't loaded or failed but we have static data
+                                        <>
+                                            {currentWeatherData.tip.text.replace(currentWeatherData.tip.drink, '')}
+                                            <strong>{currentWeatherData.tip.drink}</strong>
+                                            {currentWeatherData.tip.text.split(currentWeatherData.tip.drink)[1] || ''}
+                                        </>
+                                    )}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* Header */}
       <header className="flex justify-between items-center">
@@ -371,7 +574,9 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
           </div>
         </div>
         <div className="flex items-center gap-1 text-cafa-accent">
-            <SunIcon className="w-5 h-5" />
+            <button onClick={() => setIsWeatherOpen(true)} className="hover:bg-cafa-accent/10 p-2 rounded-full transition-colors">
+                <SunIcon className="w-6 h-6" />
+            </button>
         </div>
       </header>
 
