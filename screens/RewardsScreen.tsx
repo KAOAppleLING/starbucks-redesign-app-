@@ -60,9 +60,10 @@ interface RewardsScreenProps {
     setActiveScreen: (screen: Screen) => void;
     unlockedAchievements: string[];
     toggleAchievement: (name: string) => void;
+    openWeather: () => void;
 }
 
-const RewardsScreen: React.FC<RewardsScreenProps> = ({ setActiveScreen, unlockedAchievements = [], toggleAchievement }) => {
+const RewardsScreen: React.FC<RewardsScreenProps> = ({ setActiveScreen, unlockedAchievements = [], toggleAchievement, openWeather }) => {
     const userPoints = 350;
     const pointsForNextCoffee = 500;
     const progress = (userPoints / pointsForNextCoffee) * 100;
@@ -78,7 +79,7 @@ const RewardsScreen: React.FC<RewardsScreenProps> = ({ setActiveScreen, unlocked
     const handleAchievementClick = (name: string) => {
         toggleAchievement(name);
         if (name === 'Morning Regular') {
-            setActiveScreen('Home');
+            setActiveScreen('Stores');
         }
     };
 

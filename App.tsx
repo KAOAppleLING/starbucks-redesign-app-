@@ -12,6 +12,7 @@ const App: React.FC = () => {
   const [activeScreen, setActiveScreen] = useState<Screen>('Home');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [unlockedAchievements, setUnlockedAchievements] = useState<string[]>(['Eco-Warrior']);
+  const [isWeatherOpen, setIsWeatherOpen] = useState(false);
 
   const addToCart = (coffee: CoffeeOption) => {
     setCart(prevCart => {
@@ -49,21 +50,30 @@ const App: React.FC = () => {
   const renderScreen = () => {
     switch (activeScreen) {
       case 'Home':
-        return <HomeScreen setActiveScreen={setActiveScreen} />;
+        return <HomeScreen 
+            setActiveScreen={setActiveScreen} 
+            isWeatherOpen={isWeatherOpen}
+            setIsWeatherOpen={setIsWeatherOpen}
+        />;
       case 'Rewards':
         return <RewardsScreen 
             setActiveScreen={setActiveScreen} 
             unlockedAchievements={unlockedAchievements}
             toggleAchievement={toggleAchievement}
+            openWeather={() => setIsWeatherOpen(true)}
         />;
       case 'Order':
         return <OrderScreen cart={cart} updateCartItemQuantity={updateCartItemQuantity} setActiveScreen={setActiveScreen} />;
       case 'Stores':
         return <StoresScreen addToCart={addToCart} />;
       case 'Account':
-        return <AccountScreen />;
+        return <AccountScreen setActiveScreen={setActiveScreen} />;
       default:
-        return <HomeScreen setActiveScreen={setActiveScreen} />;
+        return <HomeScreen 
+            setActiveScreen={setActiveScreen}
+            isWeatherOpen={isWeatherOpen}
+            setIsWeatherOpen={setIsWeatherOpen}
+        />;
     }
   };
 

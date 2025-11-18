@@ -2,6 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell } from 'recharts';
 import { HeartIcon, CoffeeIcon } from '../constants';
+import type { Screen } from '../types';
 
 const healthIndex = 7.8;
 const cupsThisWeek = 12;
@@ -45,8 +46,11 @@ const CameraIcon: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
+interface AccountScreenProps {
+    setActiveScreen?: (screen: Screen) => void;
+}
 
-const AccountScreen: React.FC = () => {
+const AccountScreen: React.FC<AccountScreenProps> = ({ setActiveScreen }) => {
   const color = getHealthIndexColor(healthIndex);
   const [name, setName] = useState('Alex Chen');
   const [summary, setSummary] = useState('Your Personal Coffee Summary');
@@ -165,7 +169,15 @@ const AccountScreen: React.FC = () => {
         <h3 className="text-xl font-bold mb-3">Recent Activity</h3>
         <div className="space-y-3">
             {recentOrders.map(order => (
-                <div key={order.id} className="bg-white p-3 rounded-xl shadow-sm flex items-center gap-4">
+                <div 
+                    key={order.id} 
+                    className={`bg-white p-3 rounded-xl shadow-sm flex items-center gap-4 ${order.name === 'Caffè Latte' ? 'cursor-pointer hover:bg-gray-50 transition-colors' : ''}`}
+                    onClick={() => {
+                        if (order.name === 'Caffè Latte' && setActiveScreen) {
+                            setActiveScreen('Order');
+                        }
+                    }}
+                >
                     <img src={order.image} alt={order.name} className="w-12 h-12 rounded-lg object-cover" />
                     <div className="flex-1">
                         <p className="font-bold">{order.name}</p>

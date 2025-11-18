@@ -5,12 +5,13 @@ import { GoogleGenAI, LiveServerMessage, Modality, Type } from '@google/genai';
 
 interface HomeScreenProps {
   setActiveScreen: (screen: Screen) => void;
+  isWeatherOpen: boolean;
+  setIsWeatherOpen: (isOpen: boolean) => void;
 }
 
-const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
+const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen, isWeatherOpen, setIsWeatherOpen }) => {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannerMode, setScannerMode] = useState<'scan' | 'my_code'>('scan');
-  const [isWeatherOpen, setIsWeatherOpen] = useState(false);
   const [location, setLocation] = useState('New York, USA');
   const [aiTip, setAiTip] = useState<{ text: string; drink: string } | null>(null);
   const [isTipLoading, setIsTipLoading] = useState(false);
@@ -501,7 +502,7 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
                     </div>
                     <button 
                         onClick={() => setIsWeatherOpen(false)}
-                        className="absolute top-4 right-4 text-white/70 hover:text-white hover:bg-white/10 rounded-full p-2 transition-colors z-20"
+                        className="absolute top-4 right-4 text-white/70 hover:text-white hover:bg-white/10 rounded-full p-2 transition-colors z-20 bg-transparent"
                     >
                         <XMarkIcon className="w-6 h-6" />
                     </button>
