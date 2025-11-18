@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell } from 'recharts';
 import { HeartIcon, CoffeeIcon } from '../constants';
@@ -13,6 +14,16 @@ const coffeeConsumptionData = [
   { name: 'F', cups: 1 },
   { name: 'S', cups: 3 },
   { name: 'S', cups: 0 },
+];
+
+const weeklyHealthData = [
+  { name: 'M', score: 8.0 },
+  { name: 'T', score: 7.5 },
+  { name: 'W', score: 6.0 },
+  { name: 'T', score: 8.5 },
+  { name: 'F', score: 9.0 },
+  { name: 'S', score: 7.0 },
+  { name: 'S', score: 10.0 },
 ];
 
 const recentOrders = [
@@ -40,6 +51,7 @@ const AccountScreen: React.FC = () => {
   const [name, setName] = useState('Alex Chen');
   const [summary, setSummary] = useState('Your Personal Coffee Summary');
   const [profilePic, setProfilePic] = useState('https://picsum.photos/id/1005/200/200');
+  const [activeChart, setActiveChart] = useState<'cups' | 'health'>('cups');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleProfilePicClick = () => {
@@ -103,25 +115,46 @@ const AccountScreen: React.FC = () => {
 
       {/* Stats Grid */}
       <section className="grid grid-cols-2 gap-4">
-        <StatCard title="Health Index" icon={HeartIcon} color={color}>
+        <StatCard 
+            title="Health Index" 
+            icon={HeartIcon} 
+            color={color} 
+            onClick={() => setActiveChart('health')}
+            isActive={activeChart === 'health'}
+        >
             <p className={`text-4xl font-bold text-${color}`}>{healthIndex.toFixed(1)}</p>
             <p className="text-xs text-cafa-text-secondary">Based on recent orders</p>
         </StatCard>
-        <StatCard title="Cups This Week" icon={CoffeeIcon} color="cafa-primary">
+        <StatCard 
+            title="Cups This Week" 
+            icon={CoffeeIcon} 
+            color="cafa-primary"
+            onClick={() => setActiveChart('cups')}
+            isActive={activeChart === 'cups'}
+        >
             <p className="text-4xl font-bold text-cafa-primary">{cupsThisWeek}</p>
             <p className="text-xs text-cafa-text-secondary">Keep track of your intake</p>
         </StatCard>
       </section>
 
-      {/* Coffee Consumption Chart */}
+      {/* Chart */}
       <section className="bg-white p-5 rounded-2xl shadow-sm">
-        <h3 className="font-bold text-lg mb-4">Weekly Consumption</h3>
+        <h3 className="font-bold text-lg mb-4">
+            {activeChart === 'health' ? 'Weekly Health Trends' : 'Weekly Consumption'}
+        </h3>
         <div className="h-40">
             <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={coffeeConsumptionData} margin={{ top: 5, right: 0, left: -20, bottom: 5 }}>
+                <BarChart 
+                    data={activeChart === 'health' ? weeklyHealthData : coffeeConsumptionData} 
+                    margin={{ top: 5, right: 0, left: -20, bottom: 5 }}
+                >
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#757575', fontSize: 12 }} />
                     <YAxis allowDecimals={false} axisLine={false} tickLine={false} tick={{ fill: '#757575', fontSize: 12 }} />
-                    <Bar dataKey="cups" fill="#00704A" radius={[4, 4, 0, 0]} />
+                    <Bar 
+                        dataKey={activeChart === 'health' ? 'score' : 'cups'} 
+                        fill={activeChart === 'health' ? '#689F38' : '#00704A'} 
+                        radius={[4, 4, 0, 0]} 
+                    />
                 </BarChart>
             </ResponsiveContainer>
         </div>
@@ -146,12 +179,22 @@ const AccountScreen: React.FC = () => {
   );
 };
 
-const StatCard: React.FC<{ title: string; icon: React.FC<{className?: string}>; color: string; children: React.ReactNode }> = ({ title, icon: Icon, color, children }) => {
+const StatCard: React.FC<{ 
+    title: string; 
+    icon: React.FC<{className?: string}>; 
+    color: string; 
+    children: React.ReactNode;
+    onClick?: () => void;
+    isActive?: boolean;
+}> = ({ title, icon: Icon, color, children, onClick, isActive }) => {
     return (
-        <div className="bg-white p-4 rounded-2xl shadow-sm flex flex-col justify-between h-40">
+        <div 
+            className={`bg-white p-4 rounded-2xl shadow-sm flex flex-col justify-between h-40 transition-all duration-200 cursor-pointer ${isActive ? 'ring-2 ring-' + color : 'hover:shadow-md'}`}
+            onClick={onClick}
+        >
             <div>
-                <div className={`w-8 h-8 rounded-full bg-${color}/10 flex items-center justify-center`}>
-                    <Icon className={`w-5 h-5 text-${color}`} />
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-colors duration-200 ${isActive ? `bg-${color} text-white` : `bg-${color}/10 text-${color}`}`}>
+                    <Icon className="w-5 h-5" />
                 </div>
                 <h3 className="font-bold text-cafa-text-primary mt-2">{title}</h3>
             </div>
