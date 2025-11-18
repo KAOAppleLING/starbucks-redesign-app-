@@ -1,5 +1,8 @@
 {
   "name": "Cafa Coffee App",
   "description": "A top-tier AI coffee experience App that combines an AI assistant, sustainability, and community features, designed with a unified and premium visual identity.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
 }

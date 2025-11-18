@@ -1,15 +1,364 @@
 
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { Screen } from '../types';
-import { SunIcon, UserIcon, DevicePhoneMobileIcon, QrCodeIcon, MicrophoneIcon } from '../constants';
+import { SunIcon, UserIcon, DevicePhoneMobileIcon, QrCodeIcon, MicrophoneIcon, XMarkIcon } from '../constants';
+import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
 
 interface HomeScreenProps {
   setActiveScreen: (screen: Screen) => void;
 }
 
 const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [scannerMode, setScannerMode] = useState<'scan' | 'my_code'>('scan');
+  
+  // Voice Assistant State
+  const [isVoiceAssistantOpen, setIsVoiceAssistantOpen] = useState(false);
+  const [voiceStatus, setVoiceStatus] = useState<'connecting' | 'listening' | 'speaking' | 'error'>('connecting');
+  
+  // Refs for Audio Handling
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const outputAudioContextRef = useRef<AudioContext | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const sessionRef = useRef<any>(null);
+  const nextStartTimeRef = useRef<number>(0);
+  const audioQueueRef = useRef<AudioBufferSourceNode[]>([]);
+
+  const openScanner = () => {
+    setScannerMode('scan');
+    setIsScannerOpen(true);
+  };
+
+  // --- Audio Helper Functions ---
+  function createBlob(data: Float32Array): { data: string; mimeType: string } {
+    const l = data.length;
+    const int16 = new Int16Array(l);
+    for (let i = 0; i < l; i++) {
+      int16[i] = data[i] * 32768;
+    }
+    return {
+      data: encode(new Uint8Array(int16.buffer)),
+      mimeType: 'audio/pcm;rate=16000',
+    };
+  }
+
+  function encode(bytes: Uint8Array) {
+    let binary = '';
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return btoa(binary);
+  }
+
+  function decode(base64: string) {
+    const binaryString = atob(base64);
+    const len = binaryString.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes;
+  }
+
+  async function decodeAudioData(
+    data: Uint8Array,
+    ctx: AudioContext,
+    sampleRate: number,
+    numChannels: number,
+  ): Promise<AudioBuffer> {
+    const dataInt16 = new Int16Array(data.buffer);
+    const frameCount = dataInt16.length / numChannels;
+    const buffer = ctx.createBuffer(numChannels, frameCount, sampleRate);
+
+    for (let channel = 0; channel < numChannels; channel++) {
+      const channelData = buffer.getChannelData(channel);
+      for (let i = 0; i < frameCount; i++) {
+        channelData[i] = dataInt16[i * numChannels + channel] / 32768.0;
+      }
+    }
+    return buffer;
+  }
+
+  const stopVoiceSession = () => {
+    // Close session if exists
+    // Note: session object doesn't have a close method in all versions, but we stop sending data
+    sessionRef.current = null;
+
+    // Stop input
+    if (processorRef.current) {
+        processorRef.current.disconnect();
+        processorRef.current = null;
+    }
+    if (sourceRef.current) {
+        sourceRef.current.disconnect();
+        sourceRef.current = null;
+    }
+    if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(track => track.stop());
+        mediaStreamRef.current = null;
+    }
+    if (audioContextRef.current) {
+        audioContextRef.current.close();
+        audioContextRef.current = null;
+    }
+
+    // Stop output
+    audioQueueRef.current.forEach(source => {
+        try { source.stop(); } catch(e) {}
+    });
+    audioQueueRef.current = [];
+    
+    if (outputAudioContextRef.current) {
+        outputAudioContextRef.current.close();
+        outputAudioContextRef.current = null;
+    }
+
+    setIsVoiceAssistantOpen(false);
+    setVoiceStatus('connecting');
+  };
+
+  const startVoiceSession = async () => {
+    try {
+        setIsVoiceAssistantOpen(true);
+        setVoiceStatus('connecting');
+
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+        
+        // Setup Audio Contexts
+        const inputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+        const outputCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        
+        audioContextRef.current = inputCtx;
+        outputAudioContextRef.current = outputCtx;
+        nextStartTimeRef.current = outputCtx.currentTime;
+
+        // Get Mic Stream
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaStreamRef.current = stream;
+
+        const connectPromise = ai.live.connect({
+            model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+            config: {
+                responseModalities: [Modality.AUDIO],
+                speechConfig: {
+                    voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Kore' } }
+                },
+                systemInstruction: "You are Cafa, a friendly and knowledgeable coffee assistant. You help users navigate the app, recommend drinks based on weather or mood, and explain our sustainability efforts. Keep responses concise and conversational."
+            },
+            callbacks: {
+                onopen: () => {
+                    setVoiceStatus('listening');
+                    
+                    // Setup Input Processing
+                    const source = inputCtx.createMediaStreamSource(stream);
+                    const processor = inputCtx.createScriptProcessor(4096, 1, 1);
+                    
+                    sourceRef.current = source;
+                    processorRef.current = processor;
+
+                    processor.onaudioprocess = (e) => {
+                        const inputData = e.inputBuffer.getChannelData(0);
+                        const pcmBlob = createBlob(inputData);
+                        
+                        // Send to Gemini
+                        connectPromise.then(session => {
+                            sessionRef.current = session;
+                            session.sendRealtimeInput({ media: pcmBlob });
+                        });
+                    };
+
+                    source.connect(processor);
+                    processor.connect(inputCtx.destination);
+                },
+                onmessage: async (msg: LiveServerMessage) => {
+                    const base64Audio = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+                    
+                    if (base64Audio && outputCtx) {
+                        setVoiceStatus('speaking');
+                        
+                        // Ensure nextStartTime is at least current time to avoid playback issues
+                        nextStartTimeRef.current = Math.max(nextStartTimeRef.current, outputCtx.currentTime);
+
+                        const audioBuffer = await decodeAudioData(
+                            decode(base64Audio),
+                            outputCtx,
+                            24000,
+                            1
+                        );
+
+                        const source = outputCtx.createBufferSource();
+                        source.buffer = audioBuffer;
+                        source.connect(outputCtx.destination);
+                        
+                        source.start(nextStartTimeRef.current);
+                        nextStartTimeRef.current += audioBuffer.duration;
+                        
+                        audioQueueRef.current.push(source);
+                        
+                        source.onended = () => {
+                            audioQueueRef.current = audioQueueRef.current.filter(s => s !== source);
+                            if (audioQueueRef.current.length === 0) {
+                                setVoiceStatus('listening');
+                            }
+                        };
+                    }
+                    
+                    if (msg.serverContent?.interrupted) {
+                        audioQueueRef.current.forEach(s => {
+                            try { s.stop(); } catch(e) {}
+                        });
+                        audioQueueRef.current = [];
+                        nextStartTimeRef.current = outputCtx.currentTime;
+                        setVoiceStatus('listening');
+                    }
+                },
+                onclose: () => {
+                    console.log("Voice session closed");
+                    stopVoiceSession();
+                },
+                onerror: (err) => {
+                    console.error("Voice session error:", err);
+                    setVoiceStatus('error');
+                    setTimeout(stopVoiceSession, 2000);
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error("Failed to start voice session:", error);
+        setVoiceStatus('error');
+        setTimeout(stopVoiceSession, 2000);
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+        if (isVoiceAssistantOpen) {
+            stopVoiceSession();
+        }
+    };
+  }, []);
+
+
   return (
     <div className="p-4 space-y-8">
+      {/* Scanner Overlay */}
+      {isScannerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-center animate-in fade-in duration-200 backdrop-blur-sm">
+            <button 
+                onClick={() => setIsScannerOpen(false)}
+                className="absolute top-6 right-6 text-white p-2 rounded-full bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors z-50"
+                aria-label="Close scanner"
+            >
+                <XMarkIcon className="w-6 h-6" />
+            </button>
+            
+            {scannerMode === 'scan' ? (
+                <>
+                    <div className="relative mb-8 animate-in zoom-in duration-300">
+                        <div className="w-64 h-64 border-2 border-white/30 rounded-3xl overflow-hidden relative bg-black">
+                            <div className="absolute inset-0 bg-gradient-to-b from-transparent via-cafa-accent/5 to-transparent animate-pulse"></div>
+                            <div className="absolute left-0 w-full h-1 bg-cafa-accent/90 shadow-[0_0_20px_rgba(201,168,124,0.8)] animate-scan z-10"></div>
+                        </div>
+                        
+                        {/* Corner markers */}
+                        <div className="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-cafa-accent rounded-tl-xl"></div>
+                        <div className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-cafa-accent rounded-tr-xl"></div>
+                        <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-cafa-accent rounded-bl-xl"></div>
+                        <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-cafa-accent rounded-br-xl"></div>
+                    </div>
+                    
+                    <div className="text-center space-y-3 px-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <p className="text-white font-bold text-xl tracking-tight">Scan QR Code</p>
+                        <p className="text-white/60 text-sm leading-relaxed">Align the QR code within the frame to scan and pay instantly.</p>
+                    </div>
+                </>
+            ) : (
+                <>
+                    <div className="relative mb-8 bg-white p-4 rounded-3xl shadow-[0_0_40px_rgba(255,255,255,0.1)] animate-in zoom-in duration-300">
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=CafaUserAlexChen" alt="My QR Code" className="w-60 h-60 mix-blend-multiply opacity-90" />
+                        <div className="absolute inset-0 pointer-events-none rounded-3xl ring-1 ring-inset ring-black/10"></div>
+                    </div>
+                    
+                    <div className="text-center space-y-3 px-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                        <p className="text-white font-bold text-xl tracking-tight">My Member Code</p>
+                        <p className="text-white/60 text-sm leading-relaxed">Show this code to earn rewards and pay.</p>
+                    </div>
+                </>
+            )}
+
+            <div className="absolute bottom-12 flex gap-4">
+                <button 
+                    onClick={() => setScannerMode('my_code')}
+                    className={`${scannerMode === 'my_code' ? 'bg-cafa-accent text-white shadow-[0_0_20px_rgba(201,168,124,0.4)]' : 'bg-white/10 text-white/80 hover:bg-white/20'} px-6 py-2 rounded-full text-sm font-semibold transition-all duration-300 backdrop-blur-md`}
+                >
+                    My Code
+                </button>
+                <button 
+                    onClick={() => setScannerMode('scan')}
+                    className={`${scannerMode === 'scan' ? 'bg-cafa-accent text-white shadow-[0_0_20px_rgba(201,168,124,0.4)]' : 'bg-white/10 text-white/80 hover:bg-white/20'} px-6 py-2 rounded-full text-sm font-semibold transition-all duration-300 backdrop-blur-md`}
+                >
+                    Scan
+                </button>
+            </div>
+        </div>
+      )}
+
+      {/* Voice Assistant Overlay */}
+      {isVoiceAssistantOpen && (
+        <div className="fixed inset-0 z-50 bg-cafa-primary flex flex-col items-center justify-center animate-in fade-in duration-300">
+            <button 
+                onClick={stopVoiceSession}
+                className="absolute top-6 right-6 text-white/80 p-3 rounded-full hover:bg-white/10 transition-colors"
+            >
+                <XMarkIcon className="w-8 h-8" />
+            </button>
+            
+            <div className="flex-1 flex flex-col items-center justify-center w-full max-w-md px-8 space-y-12">
+                <div className="text-center space-y-2 animate-in slide-in-from-bottom-4 duration-500">
+                    <h2 className="text-3xl font-bold text-white">Cafa Assistant</h2>
+                    <p className="text-cafa-secondary/80">
+                        {voiceStatus === 'connecting' && 'Connecting...'}
+                        {voiceStatus === 'listening' && 'Listening...'}
+                        {voiceStatus === 'speaking' && 'Speaking...'}
+                        {voiceStatus === 'error' && 'Connection Failed'}
+                    </p>
+                </div>
+
+                <div className="relative flex items-center justify-center">
+                     {/* Visualizer Rings */}
+                     {voiceStatus === 'listening' && (
+                        <>
+                            <div className="absolute w-64 h-64 bg-white/5 rounded-full animate-ping opacity-20"></div>
+                            <div className="absolute w-48 h-48 bg-white/10 rounded-full animate-pulse"></div>
+                        </>
+                     )}
+                     {voiceStatus === 'speaking' && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                             <div className="w-40 h-40 border-4 border-cafa-accent/30 rounded-full animate-spin [animation-duration:3s]"></div>
+                             <div className="absolute w-56 h-56 border-2 border-cafa-accent/10 rounded-full animate-spin [animation-duration:5s] direction-reverse"></div>
+                        </div>
+                     )}
+                     
+                     <button 
+                        onClick={stopVoiceSession}
+                        className={`relative z-10 w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-transform duration-200 ${voiceStatus === 'speaking' ? 'scale-110 bg-cafa-accent' : 'bg-white text-cafa-primary'}`}
+                     >
+                        <MicrophoneIcon className={`w-10 h-10 ${voiceStatus === 'speaking' ? 'text-white' : 'text-cafa-primary'}`} />
+                     </button>
+                </div>
+                
+                <p className="text-white/60 text-sm text-center max-w-xs animate-in fade-in duration-700 delay-300">
+                    Try saying "Suggest a coffee for a rainy day" or "What is the health index of a Latte?"
+                </p>
+            </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="flex justify-between items-center">
         <div className="flex items-center gap-3">
@@ -37,8 +386,19 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
         </div>
         <div className="grid grid-cols-3 gap-3 mt-5">
             <ActionButton icon={DevicePhoneMobileIcon} label="Mobile Order" onDark />
-            <ActionButton icon={QrCodeIcon} label="Scan & Pay" onDark />
-            <ActionButton icon={MicrophoneIcon} label="AI Voice" isAccent onDark/>
+            <ActionButton 
+                icon={QrCodeIcon} 
+                label="Scan & Pay" 
+                onDark 
+                onClick={openScanner}
+            />
+            <ActionButton 
+                icon={MicrophoneIcon} 
+                label="AI Voice" 
+                isAccent 
+                onDark
+                onClick={startVoiceSession}
+            />
         </div>
       </div>
       
@@ -49,7 +409,11 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
             <h3 className="text-xl font-bold text-cafa-text-primary">Just for You</h3>
             <p className="text-sm text-cafa-text-secondary mt-1">Customize your drink! Tap to chat with our AI and get a beverage recommendation tailored.</p>
           </div>
-          <button className="text-xs font-semibold bg-starbucks-green text-white px-3 py-1.5 rounded-full whitespace-nowrap flex-shrink-0">AI Assistant</button>
+          <button 
+            onClick={startVoiceSession}
+            className="text-xs font-semibold bg-starbucks-green text-white px-3 py-1.5 rounded-full whitespace-nowrap flex-shrink-0">
+            AI Assistant
+          </button>
         </div>
         <div className="flex space-x-4 overflow-x-auto pb-4">
           <RecommendationCard
@@ -92,8 +456,8 @@ const HomeScreen: React.FC<HomeScreenProps> = ({ setActiveScreen }) => {
   );
 };
 
-const ActionButton: React.FC<{ icon: React.FC<{className?: string}>, label: string, isAccent?: boolean, onDark?: boolean }> = ({ icon: Icon, label, isAccent, onDark }) => {
-    const baseClasses = "flex flex-col items-center justify-center p-3 rounded-xl space-y-1.5 h-24 text-center transition-colors";
+const ActionButton: React.FC<{ icon: React.FC<{className?: string}>, label: string, isAccent?: boolean, onDark?: boolean, onClick?: () => void }> = ({ icon: Icon, label, isAccent, onDark, onClick }) => {
+    const baseClasses = "flex flex-col items-center justify-center p-3 rounded-xl space-y-1.5 h-24 text-center transition-colors w-full";
     
     let colorClasses: string;
     if (onDark) {
@@ -107,7 +471,7 @@ const ActionButton: React.FC<{ icon: React.FC<{className?: string}>, label: stri
     }
     
     return (
-        <button className={`${baseClasses} ${colorClasses}`}>
+        <button onClick={onClick} className={`${baseClasses} ${colorClasses}`}>
             <Icon className="w-7 h-7" />
             <span className="text-xs font-semibold">{label}</span>
         </button>
