@@ -115,11 +115,13 @@ const ActionButton: React.FC<{ icon: React.FC<{className?: string}>, label: stri
 };
 
 const RecommendationCard: React.FC<{ image: string; title: string; description: string; onAddToOrder: () => void; }> = ({ image, title, description, onAddToOrder }) => (
-  <div className="bg-white rounded-2xl shadow-sm overflow-hidden flex-shrink-0 w-40">
+  <div className="bg-white rounded-2xl shadow-sm overflow-hidden flex-shrink-0 w-40 flex flex-col">
     <img src={image} alt={title} className="w-full h-24 object-cover" />
-    <div className="p-3">
-      <h4 className="font-bold text-sm truncate">{title}</h4>
-      <p className="text-cafa-text-secondary text-xs mt-0.5">{description}</p>
+    <div className="p-3 flex flex-col flex-grow">
+      <div className="flex-grow">
+        <h4 className="font-bold text-sm truncate">{title}</h4>
+        <p className="text-cafa-text-secondary text-xs mt-0.5">{description}</p>
+      </div>
       <button
         onClick={onAddToOrder}
         className="w-full bg-cafa-primary text-white font-bold py-2 px-3 rounded-lg text-xs mt-3">
